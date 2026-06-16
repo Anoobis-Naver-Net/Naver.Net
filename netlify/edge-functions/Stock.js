@@ -9,17 +9,17 @@ export default async function handler(request) {
         });
     }
 
-    const url     = new URL(request.url);
-    const symbol  = url.searchParams.get('symbol');
-    const isIndex = url.searchParams.get('isIndex') === 'true';
-
-    const HEADERS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-cache' };
+    const url    = new URL(request.url);
+    const symbol = url.searchParams.get('symbol');
 
     if (!symbol) {
-        return new Response(JSON.stringify({ error: 'symbol 파라미터 필요' }), { status: 400, headers: HEADERS });
+        return new Response(JSON.stringify({ error: 'symbol 파라미터 필요' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
     }
 
-    const reqHeaders = {
+    const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, */*',
         'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
@@ -27,55 +27,28 @@ export default async function handler(request) {
         'Origin': 'https://finance.yahoo.com',
     };
 
-    /* ── 1. 가격 데이터 (v8/chart) ── */
-    const chartTargets = [
+    const targets = [
         `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
         `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`,
+        `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`,
     ];
 
-    let priceData = null;
-    for (const target of chartTargets) {
+    for (const target of targets) {
         try {
-            const res = await fetch(target, { headers: reqHeaders });
+            const res = await fetch(target, { headers });
             if (!res.ok) continue;
-            priceData = await res.json();
-            break;
+            const data = await res.json();
+            return new Response(JSON.stringify(data), {
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-cache' }
+            });
         } catch { continue; }
     }
 
-    if (!priceData) {
-        return new Response(JSON.stringify({ error: '가격 데이터 실패' }), { status: 502, headers: HEADERS });
-    }
-
-    /* ── 2. PER/시총 (개별주식만, 야후 웹 스크래핑) ── */
-    let per = null, marketCap = null;
-
-    if (!isIndex) {
-        try {
-            const pageUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
-            const pageRes = await fetch(pageUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                }
-            });
-
-            if (pageRes.ok) {
-                const html = await pageRes.text();
-
-                /* PE Ratio */
-                const peMatch = html.match(/"trailingPE":\s*\{[^}]*"raw":\s*([\d.]+)/);
-                if (peMatch) per = parseFloat(peMatch[1]);
-
-                /* Market Cap */
-                const mcMatch = html.match(/"marketCap":\s*\{[^}]*"raw":\s*([\d.]+)/);
-                if (mcMatch) marketCap = parseFloat(mcMatch[1]);
-            }
-        } catch { /* 실패해도 가격만 반환 */ }
-    }
-
-    return new Response(JSON.stringify({ ...priceData, per, marketCap }), { headers: HEADERS });
+    return new Response(JSON.stringify({ error: '모든 엔드포인트 실패' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    });
 }
 
 export const config = { path: '/api/stock' };
