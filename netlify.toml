@@ -1,7 +1,3 @@
 [[edge_functions]]
   function = "Stock"
   path = "/api/stock"
-
-[[edge_functions]]
-  function = "Stock-Latest"
-  path = "/api/stock-latest"
