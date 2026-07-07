@@ -1,22 +1,19 @@
-import { getStore } from "@netlify/blobs";
+import { getStore } from '@netlify/blobs';
 
-// symbols 조합별로 저장하되, 조회 전용 엔드포인트에서는 "가장 최근에 저장된 조합"을
-// 심볼 지정 없이도 바로 돌려줄 수 있도록 별도의 고정 키에도 함께 저장한다.
-const LATEST_ANY_KEY = "latest";
-
-function keyForSymbols(rawList) {
-    return "symbols:" + rawList;
+function latestKeyFor(rawList) {
+    // 심볼 조합별로 캐시를 구분한다 (예: "stock-latest:AAPL,MSFT")
+    return 'stock-latest:' + rawList;
 }
 
-async function saveLatestStock(rawList, payload) {
+async function saveLatest(rawList, payload) {
     try {
-        const store = getStore("stock-cache");
-        const record = { ...payload, savedAt: Date.now() };
-        await store.setJSON(keyForSymbols(rawList), record);
-        await store.setJSON(LATEST_ANY_KEY, record);
+        const store = getStore('location-cache');
+        await store.setJSON(latestKeyFor(rawList), {
+            data: payload,
+            savedAt: new Date().toISOString(),
+        });
     } catch (e) {
-        // 저장 실패는 원래 응답 흐름을 막지 않는다 (best-effort 캐시).
-        console.error("stock-cache 저장 실패:", e && e.message);
+        // 저장 실패는 무시(응답 자체는 정상적으로 반환되어야 함)
     }
 }
 
@@ -71,7 +68,7 @@ export default async function handler(request) {
             const res = await fetch(target, { headers });
             if (!res.ok) continue;
             const data = await res.json();
-            await saveLatestStock(rawList, data);
+            await saveLatest(rawList, data);
             return new Response(JSON.stringify(data), {
                 headers: {
                     'Content-Type': 'application/json',

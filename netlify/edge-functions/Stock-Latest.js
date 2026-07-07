@@ -1,10 +1,11 @@
-import { getStore } from "@netlify/blobs";
+import { getStore } from '@netlify/blobs';
 
-const LATEST_ANY_KEY = "latest";
-
-function keyForSymbols(rawList) {
-    return "symbols:" + rawList;
+function latestKeyFor(rawList) {
+    // Stock.js와 동일한 키 규칙을 사용해야 저장값을 찾을 수 있다.
+    return 'stock-latest:' + rawList;
 }
+
+const HEADERS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
 export default async function handler(request) {
     if (request.method === 'OPTIONS') {
@@ -17,25 +18,33 @@ export default async function handler(request) {
         });
     }
 
-    const HEADERS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
-
     const url    = new URL(request.url);
     const single = url.searchParams.get('symbol');
     const multi  = url.searchParams.get('symbols');
     const rawList = multi || single;
 
+    if (!rawList) {
+        return new Response(JSON.stringify({ error: 'symbol 또는 symbols 파라미터 필요' }), {
+            status: 400,
+            headers: HEADERS,
+        });
+    }
+
     try {
-        const store = getStore("stock-cache");
-        // symbols가 지정됐으면 해당 조합의 저장값을, 없으면 가장 최근 저장값을 반환한다.
-        const saved = await store.get(rawList ? keyForSymbols(rawList) : LATEST_ANY_KEY, { type: "json" });
+        const store = getStore('location-cache');
+        const saved = await store.get(latestKeyFor(rawList), { type: 'json' });
 
         if (!saved) {
             return new Response(JSON.stringify({ data: null }), { status: 200, headers: HEADERS });
         }
 
-        return new Response(JSON.stringify({ data: saved }), { status: 200, headers: HEADERS });
+        return new Response(JSON.stringify({
+            data: saved.data,
+            savedAt: saved.savedAt,
+        }), { status: 200, headers: HEADERS });
+
     } catch (e) {
-        return new Response(JSON.stringify({ data: null, error: '서버 내부 오류', detail: e.message }), { status: 500, headers: HEADERS });
+        return new Response(JSON.stringify({ data: null, error: '저장된 값 조회 실패', detail: e.message }), { status: 200, headers: HEADERS });
     }
 }
 
